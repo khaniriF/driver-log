@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EarthLungs Driver Log</title>
+<style>
+  :root{
+    --forest:#16422f; --leaf:#3f9b5d; --sun:#f2b441; --paper:#f6f1e4; --ink:#1d2a22; --err:#b3261e;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--paper);color:var(--ink)}
+  header{background:linear-gradient(rgba(22,66,47,.15),rgba(22,66,47,.55)),url("hero.jpg/hero.jpg") center/cover no-repeat;color:var(--paper);padding: 70px 20px 90px;border-radius:0 0 32px 32px}
+header h1{margin:0;font-size:1.5rem;letter-spacing:.3px}
+  header p{margin:6px 0 0;opacity:.8;font-size:.95rem}
+  main{max-width:480px;margin:-28px auto 40px;padding:0 16px}
+  form{background:#fff;border-radius:20px;padding:20px;box-shadow:0 8px 24px rgba(22,66,47,.12)}
+  label{display:block;font-weight:600;font-size:.85rem;margin:14px 0 6px}
+  input,select,textarea{width:100%;padding:12px;border:2px solid #dcd5c0;border-radius:12px;font-size:1rem;background:#fffdf8;font-family:inherit}
+  input:focus,select:focus,textarea:focus{outline:none;border-color:var(--leaf)}
+  .row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .dist{margin-top:14px;padding:12px;border-radius:12px;background:#e9f4ec;color:var(--forest);font-weight:700;text-align:center}
+  button{width:100%;margin-top:18px;padding:14px;border:0;border-radius:14px;background:var(--leaf);color:#fff;font-size:1.05rem;font-weight:700;cursor:pointer}
+  button:disabled{opacity:.6}
+  #msg{margin-top:14px;text-align:center;font-weight:600;min-height:1.2em}
+  .ok{color:var(--leaf)} .bad{color:var(--err)}
+</style>
+</head>
+<body>
+<header>
+  <h1>🌳 EarthLungs Driver Log</h1>
+  <p>Log each trip in under a minute.</p>
+</header>
+<main>
+<form id="f">
+  <div class="row">
+    <div><label for="driver">Driver name</label><input id="driver" required></div>
+    <div><label for="vehicle">Vehicle reg.</label><input id="vehicle" placeholder="KXX 123A" required></div>
+  </div>
+  <label for="date">Date</label><input id="date" type="date" required>
+  <div class="row">
+    <div><label for="start">Start odometer (km)</label><input id="start" type="number" inputmode="numeric" min="0" required></div>
+    <div><label for="end">End odometer (km)</label><input id="end" type="number" inputmode="numeric" min="0" required></div>
+  </div>
+  <div class="dist" id="dist">Distance: 0 km</div>
+  <label for="from">From</label><input id="from" required>
+  <label for="to">Destination</label><input id="to" required>
+  <label for="purpose">Purpose of trip</label>
+  <select id="purpose" required>
+    <option value="">Choose...</option>
+    <option>Field visit</option><option>Seedling delivery</option>
+    <option>Staff transport</option><option>Office errand</option><option>Other</option>
+  </select>
+  <label for="fuel">Fuel added (litres, optional)</label>
+  <input id="fuel" type="number" inputmode="decimal" min="0" step="0.1">
+  <button id="btn" type="submit">Save trip</button>
+  <div id="msg"></div>
+</form>
+</main>
+
+<script>
+// 1. Paste your Google Apps Script web app URL here (see setup steps).
+const SCRIPT_URL = "PASTE_YOUR_WEB_APP_URL_HERE";
+
+const $ = id => document.getElementById(id);
+
+// 2. Remember driver and vehicle on this phone so they type them only once.
+//    localStorage = small storage built into the browser, kept on this device only.
+try {
+  $("driver").value = localStorage.getItem("driver") || "";
+  $("vehicle").value = localStorage.getItem("vehicle") || "";
+} catch (e) {}
+$("date").valueAsDate = new Date();
+
+// 3. Live distance calculation.
+function updateDistance(){
+  const d = Number($("end").value) - Number($("start").value);
+  $("dist").textContent = "Distance: " + (d > 0 ? d : 0) + " km";
+}
+$("start").addEventListener("input", updateDistance);
+$("end").addEventListener("input", updateDistance);
+
+// 4. Validate, then send the trip to Google Sheets.
+$("f").addEventListener("submit", async e => {
+  e.preventDefault();
+  const msg = $("msg");
+  const start = Number($("start").value), end = Number($("end").value);
+  if (end < start){ msg.className = "bad"; msg.textContent = "End odometer can't be lower than start."; return; }
+
+  const trip = {
+    driver: $("driver").value.trim(), vehicle: $("vehicle").value.trim().toUpperCase(),
+    date: $("date").value, start, end, distance: end - start,
+    from: $("from").value.trim(), to: $("to").value.trim(),
+    purpose: $("purpose").value, fuel: $("fuel").value
+  };
+
+  $("btn").disabled = true; msg.className = ""; msg.textContent = "Saving...";
+  try {
+    // no-cors: the browser sends the data but won't let us read the reply.
+    await fetch(SCRIPT_URL, { method: "POST", mode: "no-cors", body: JSON.stringify(trip) });
+    try { localStorage.setItem("driver", trip.driver); localStorage.setItem("vehicle", trip.vehicle); } catch (e) {}
+    msg.className = "ok"; msg.textContent = "Trip saved ✓";
+    // Next trip usually starts where this one ended.
+    $("start").value = end; $("end").value = ""; $("from").value = trip.to; $("to").value = "";
+    $("fuel").value = ""; updateDistance();
+  } catch (err) {
+    msg.className = "bad"; msg.textContent = "Could not save. Check your signal and try again.";
+  }
+  $("btn").disabled = false;
+});
+</script>
+</body>
+</html>
